@@ -1,6 +1,6 @@
 '''Simple Markdown File Rendering Webserver'''
 
-import argparse, logging, os, sys
+import argparse, logging, os, sys, re
 
 from nicegui import ui
 from pathlib import Path
@@ -15,12 +15,50 @@ def main(markdown_file: Path):
     
     ''' title of page '''
     ui.page_title('Markdown Server')
-    with open(markdown_file, 'r') as readme_in:
-        ui.markdown(readme_in.read())
+
+    ''' create a list of dicts that contain infomation about the content in the markdown file'''
+    renderableItems = split_markdown_by_mermaid_blocks(markdown_file)
+
+    '''for each item in the list, decide if the content is text or a mermaid chart, and render accodingly to nicegui ui'''
+    for item in renderableItems:
+        if item['type'] == "text":
+            ui.markdown(item['content'])
+        elif item['type'] == "mermaid":
+            ui.mermaid(item['content']).style('width: 100%; height: 100%;')
                      
     ''' run server, reload when files are modified '''
-    ui.run(show=True) #launch new window with server
+    ui.run(show=False)
+    
 
+def split_markdown_by_mermaid_blocks(markdown_file: Path):
+    ''' 
+    takes a file path in to a markdown file, determines where mermaid diagrams are emedded
+    returns a list of dicts such:
+    {'type': 'text', 'content': '# Example Markdown\n\nThis is some text before the mermaid chart.'}
+    {'type': 'mermaid', 'content': 'graph TD;\n    A-->B;\n    A-->C;\n    B-->D;\n    C-->D;'}
+    ''' 
+
+    with open(markdown_file, 'r') as readme_in:
+        markdown_content = readme_in.read() # save to var
+
+    # Regular expression to match mermaid blocks
+    mermaid_pattern = r"``` mermaid(.*?)```"
+    
+    # Find all mermaid blocks using re.DOTALL to match across multiple lines
+    mermaid_blocks = re.findall(mermaid_pattern, markdown_content, re.DOTALL)
+    
+    # Split the markdown content into parts excluding the mermaid blocks
+    non_mermaid_parts = re.split(mermaid_pattern, markdown_content, flags=re.DOTALL)
+    
+    # Combine the results into a list of objects
+    result = []
+    for i, part in enumerate(non_mermaid_parts):
+        if i % 2 == 0:  # Non-mermaid content
+            result.append({"type": "text", "content": part.strip()})
+        else:  # Mermaid block
+            result.append({"type": "mermaid", "content": part.strip()})
+    
+    return result
                 
 def set_up_logging(packages, log_level, log_file):
     '''Set up logging for specific packages/modules.'''
